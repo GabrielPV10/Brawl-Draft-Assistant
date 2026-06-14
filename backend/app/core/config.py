@@ -29,6 +29,10 @@ class Settings(BaseSettings):
     supercell_api_key: str = ""
     supercell_api_base: str = "https://api.brawlstars.com/v1"
 
+    # Fuente de estadísticas que usa el job de ingesta (run_daily).
+    # "mock" = datos sintéticos; "brawlify" = scraper real (hoy bloqueado por Cloudflare).
+    stats_source: str = "mock"
+
     brawlify_base_url: str = "https://brawlify.com"
     brawlify_user_agent: str = "BrawlDraftAssistant/0.1"
     brawlify_rate_limit_seconds: float = 1.0

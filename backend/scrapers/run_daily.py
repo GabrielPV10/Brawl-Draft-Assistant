@@ -14,22 +14,42 @@ import argparse
 import asyncio
 import logging
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
+from app.core.config import get_settings
 from app.db.session import SessionLocal, engine
 from app.models.brawler import Brawler
 from app.models.map import Map
 from app.models.map_stats import MapStats
 from app.models.synergy import Synergy
 from scrapers.brawlify_scraper import BrawlifyStatsSource
-from scrapers.sources.base import MapScrapeResult
+from scrapers.sources.base import (
+    CounterStatsSource,
+    MapScrapeResult,
+    MapStatsSource,
+)
+from scrapers.sources.mock import MockStatsSource
 
 logger = logging.getLogger("scrapers.run_daily")
 
 
-async def run(map_slug: str | None = None) -> None:
-    scraper = BrawlifyStatsSource()
+def make_source() -> MapStatsSource:
+    """Construye la fuente de stats según settings.stats_source (wiring DIP).
+
+    El único lugar donde se decide la implementación concreta. run() depende solo
+    de la interfaz MapStatsSource, no de la clase concreta.
+    """
+    name = get_settings().stats_source.lower()
+    if name == "mock":
+        return MockStatsSource()
+    if name == "brawlify":
+        return BrawlifyStatsSource()
+    raise ValueError(f"stats_source desconocido: {name!r} (usa 'mock' o 'brawlify')")
+
+
+async def run(map_slug: str | None = None, source: MapStatsSource | None = None) -> None:
+    source = source or make_source()
     map_slugs = [map_slug] if map_slug else _load_map_slugs()
     if not map_slugs:
         logger.warning("No hay mapas sembrados. Corre `python -m scripts.seed_catalog` primero.")
@@ -39,23 +59,29 @@ async def run(map_slug: str | None = None) -> None:
     total_synergies = 0
     for slug in map_slugs:
         try:
-            res = await scraper.fetch_map(slug)
+            res = await source.fetch_map(slug)
         except Exception:
-            logger.exception("Fallo scrapeando %s", slug)
+            logger.exception("Fallo obteniendo datos de %s", slug)
             continue
 
         s, sy = _persist(res)
         total_stats += s
         total_synergies += sy
         logger.info(
-            "Scrapeado %s: %d stats, %d sinergias", slug, len(res.stats), len(res.team_comps)
+            "Procesado %s: %d stats, %d sinergias", slug, len(res.stats), len(res.team_comps)
         )
 
+    # Counters: matriz GLOBAL, se refresca una sola vez por corrida (no por mapa).
+    total_counters = 0
+    if isinstance(source, CounterStatsSource):
+        total_counters = await _refresh_counters(source)
+
     logger.info(
-        "Done. %d mapas procesados, %d filas map_stats, %d filas synergies.",
+        "Done. %d mapas, %d filas map_stats, %d sinergias, %d counters.",
         len(map_slugs),
         total_stats,
         total_synergies,
+        total_counters,
     )
 
 
@@ -201,6 +227,44 @@ def _upsert_team_comps_as_synergies(
                 existing.score = p["score"]
                 existing.sample_size = p["sample_size"]
     return len(payloads)
+
+
+async def _refresh_counters(source: CounterStatsSource) -> int:
+    """Reemplaza TODA la matriz de counters (relation_type='counter', map_id NULL).
+
+    Usamos delete-then-insert en vez de upsert a propósito: el UniqueConstraint
+    incluye map_id, y en Postgres dos NULL se consideran distintos, así que un
+    ON CONFLICT no detectaría el choque y duplicaría filas en cada corrida. Como
+    los counters son globales y se regeneran completos, borrar e insertar es la
+    estrategia idempotente más simple y correcta.
+    """
+    counters = await source.fetch_counters()
+    if not counters:
+        return 0
+
+    with SessionLocal() as db:
+        brawler_ids = _slug_to_brawler_id(db)
+        rows = []
+        for c in counters:
+            w = brawler_ids.get(c.winner_slug.lower())
+            loser = brawler_ids.get(c.loser_slug.lower())
+            if w is None or loser is None:
+                continue
+            rows.append(
+                Synergy(
+                    b1_id=w,
+                    b2_id=loser,
+                    map_id=None,
+                    relation_type="counter",
+                    score=c.score,
+                    sample_size=c.sample_size,
+                )
+            )
+        db.execute(delete(Synergy).where(Synergy.relation_type == "counter"))
+        if rows:
+            db.add_all(rows)
+        db.commit()
+        return len(rows)
 
 
 if __name__ == "__main__":

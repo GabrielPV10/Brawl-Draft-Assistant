@@ -13,7 +13,6 @@ from __future__ import annotations
 import argparse
 import asyncio
 import logging
-from collections.abc import Iterable
 
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -23,13 +22,14 @@ from app.models.brawler import Brawler
 from app.models.map import Map
 from app.models.map_stats import MapStats
 from app.models.synergy import Synergy
-from scrapers.brawlify_scraper import BrawlifyScraper, MapScrapeResult
+from scrapers.brawlify_scraper import BrawlifyStatsSource
+from scrapers.sources.base import MapScrapeResult
 
 logger = logging.getLogger("scrapers.run_daily")
 
 
 async def run(map_slug: str | None = None) -> None:
-    scraper = BrawlifyScraper()
+    scraper = BrawlifyStatsSource()
     map_slugs = [map_slug] if map_slug else _load_map_slugs()
     if not map_slugs:
         logger.warning("No hay mapas sembrados. Corre `python -m scripts.seed_catalog` primero.")
@@ -39,7 +39,7 @@ async def run(map_slug: str | None = None) -> None:
     total_synergies = 0
     for slug in map_slugs:
         try:
-            res = await scraper.scrape_map(slug)
+            res = await scraper.fetch_map(slug)
         except Exception:
             logger.exception("Fallo scrapeando %s", slug)
             continue

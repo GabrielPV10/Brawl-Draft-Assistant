@@ -16,7 +16,6 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
 
@@ -25,35 +24,20 @@ from bs4 import BeautifulSoup
 
 from app.core.config import get_settings
 from app.db.redis_client import get_redis
+from scrapers.sources.base import BrawlerMapStat, MapScrapeResult, TeamComp
 
 logger = logging.getLogger(__name__)
 
 
-@dataclass
-class BrawlerMapStat:
-    brawler_slug: str
-    winrate: float  # 0.0 - 1.0
-    pickrate: float  # 0.0 - 1.0
-    use_rate: float | None = None
-    sample_size: int | None = None
+class BrawlifyStatsSource:
+    """Fuente real basada en Brawlify. Implementa MapStatsSource (LSP).
 
+    Nota operacional: brawlify.com está tras Cloudflare y la API pública de
+    BrawlAPI no expone winrates, así que esta fuente hoy puede no traer datos.
+    Se conserva como contrato cumplido; la fuente real efectiva es MockStatsSource
+    hasta resolver el acceso a datos (ver docs de Fase 2).
+    """
 
-@dataclass
-class TeamComp:
-    brawler_slugs: tuple[str, str, str]
-    winrate: float
-    sample_size: int | None = None
-
-
-@dataclass
-class MapScrapeResult:
-    map_slug: str
-    stats: list[BrawlerMapStat] = field(default_factory=list)
-    team_comps: list[TeamComp] = field(default_factory=list)
-    scraped_at: datetime = field(default_factory=datetime.utcnow)
-
-
-class BrawlifyScraper:
     def __init__(self) -> None:
         s = get_settings()
         self.base_url = s.brawlify_base_url
@@ -62,7 +46,7 @@ class BrawlifyScraper:
         self.cache_ttl = s.cache_ttl_seconds
         self._last_request_at: float = 0.0
 
-    async def scrape_map(self, map_slug: str) -> MapScrapeResult:
+    async def fetch_map(self, map_slug: str) -> MapScrapeResult:
         cached = self._cache_get(map_slug)
         if cached is not None:
             return self._deserialize(cached)

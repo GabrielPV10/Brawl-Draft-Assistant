@@ -1,0 +1,42 @@
+# --- OS / Editor -----------------------------------------------------------
+.DS_Store
+Thumbs.db
+*.iml
+.idea/caches/
+.idea/libraries/
+.idea/modules.xml
+.idea/workspace.xml
+.idea/navEditor.xml
+.idea/assetWizardSettings.xml
+.vscode/
+*.swp
+
+# --- Android / Gradle ------------------------------------------------------
+android/.gradle/
+android/build/
+android/app/build/
+android/captures/
+android/.externalNativeBuild/
+android/.cxx/
+android/local.properties
+
+# --- Python / Backend ------------------------------------------------------
+backend/__pycache__/
+backend/**/__pycache__/
+backend/*.py[cod]
+backend/.venv/
+backend/venv/
+backend/.pytest_cache/
+backend/.ruff_cache/
+backend/test.db
+backend/.env
+backend/dist/
+backend/build/
+backend/*.egg-info/
+
+# --- Docker ----------------------------------------------------------------
+.docker-data/
+
+# --- Misc ------------------------------------------------------------------
+.env
+*.log

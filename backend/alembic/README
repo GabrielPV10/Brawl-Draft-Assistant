@@ -1,0 +1,7 @@
+Migraciones de Alembic para el backend.
+
+Comandos:
+    # generar autoamáticamente la primera migración del esquema
+    alembic revision --autogenerate -m "init schema"
+    # aplicar
+    alembic upgrade head

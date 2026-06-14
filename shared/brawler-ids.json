@@ -1,0 +1,12 @@
+{
+  "_comment": "Lookup id-nombre de brawlers. Se sembrará desde BrawlAPI (https://api.brawlapi.com/v1/brawlers). Por ahora sólo un par de entradas de ejemplo.",
+  "_source": "https://api.brawlapi.com/v1/brawlers",
+  "brawlers": [
+    { "id": 16000000, "name": "Shelly", "slug": "shelly" },
+    { "id": 16000001, "name": "Colt",   "slug": "colt" },
+    { "id": 16000002, "name": "Bull",   "slug": "bull" },
+    { "id": 16000003, "name": "Brock",  "slug": "brock" },
+    { "id": 16000037, "name": "Bonnie", "slug": "bonnie" },
+    { "id": 16000054, "name": "Mandy",  "slug": "mandy" }
+  ]
+}

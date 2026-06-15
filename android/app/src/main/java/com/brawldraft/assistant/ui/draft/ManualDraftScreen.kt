@@ -2,6 +2,8 @@ package com.brawldraft.assistant.ui.draft
 
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -13,18 +15,21 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.InputChip
+import androidx.compose.material3.InputChipDefaults
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -45,18 +50,21 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.brawldraft.assistant.data.api.dto.BrawlerDto
 import com.brawldraft.assistant.data.api.dto.DraftPhase
 import com.brawldraft.assistant.data.api.dto.DraftRecommendationDto
 import com.brawldraft.assistant.data.api.dto.MapDto
 
-// Colores de score: verde ≥0.6, amarillo ≥0.3, rojo <0.3
+private val ALLY_COLOR = Color(0xFF4CAF50)
+private val ENEMY_COLOR = Color(0xFFF44336)
+private val BAN_COLOR = Color(0xFF9E9E9E)
+
 private fun scoreColor(score: Float): Color = when {
     score >= 0.6f -> Color(0xFF4CAF50)
     score >= 0.3f -> Color(0xFFFFC107)
     else          -> Color(0xFFF44336)
 }
 
-// Etiquetas legibles para cada factor del breakdown
 private val FACTOR_LABELS = mapOf(
     "winrate_mapa"         to "Winrate mapa",
     "counter_score"        to "Counter",
@@ -86,13 +94,7 @@ fun ManualDraftScreen(
             style = MaterialTheme.typography.headlineSmall,
             fontWeight = FontWeight.Bold,
         )
-        Text(
-            "Escribe el nombre del mapa y selecciónalo del listado.",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
 
-        // Campo de búsqueda de mapa con dropdown
         MapSearchField(
             query = state.mapQuery,
             suggestions = state.mapSuggestions,
@@ -103,65 +105,20 @@ fun ManualDraftScreen(
             onDismiss = vm::dismissMapDropdown,
         )
 
-        Text("Fase del draft", style = MaterialTheme.typography.labelLarge)
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            modifier = Modifier.fillMaxWidth(),
-        ) {
-            DraftPhase.entries.forEach { phase ->
-                FilterChip(
-                    selected = state.phase == phase,
-                    onClick = { vm.setPhase(phase) },
-                    label = { Text(phase.name.replace('_', ' ').lowercase()) },
-                )
-            }
-        }
+        DraftProgressBar(stage = state.stage, turnIndex = state.turnIndex)
 
-        OutlinedTextField(
-            value = state.alliesInput,
-            onValueChange = vm::setAllies,
-            label = { Text("Aliados pickeados") },
-            placeholder = { Text("shelly, colt o 16000000") },
-            singleLine = true,
-            modifier = Modifier.fillMaxWidth(),
-        )
-        OutlinedTextField(
-            value = state.enemiesInput,
-            onValueChange = vm::setEnemies,
-            label = { Text("Enemigos pickeados") },
-            placeholder = { Text("bull, brock o 16000003") },
-            singleLine = true,
-            modifier = Modifier.fillMaxWidth(),
-        )
-        OutlinedTextField(
-            value = state.bansInput,
-            onValueChange = vm::setBans,
-            label = { Text("Baneados") },
-            placeholder = { Text("piper, nita") },
-            singleLine = true,
-            modifier = Modifier.fillMaxWidth(),
+        // Estado actual de los tres equipos (siempre visible una vez hay picks/bans).
+        TeamsSummary(
+            allies = state.allies,
+            enemies = state.enemies,
+            bans = state.bans,
+            onRemoveBan = if (state.stage == DraftStage.BANS) vm::removeBan else null,
         )
 
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            modifier = Modifier.fillMaxWidth(),
-        ) {
-            Button(
-                onClick = vm::recommend,
-                enabled = !state.loading,
-                modifier = Modifier.weight(1f),
-            ) { Text("Recomendar") }
-            OutlinedButton(
-                onClick = vm::fetchDummy,
-                enabled = !state.loading,
-                modifier = Modifier.weight(1f),
-            ) { Text("Probar (dummy)") }
-        }
-
-        if (state.loading) {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
-                CircularProgressIndicator()
-            }
+        when (state.stage) {
+            DraftStage.BANS    -> BansPhase(state, vm)
+            DraftStage.PICKING -> PickingPhase(state, vm)
+            DraftStage.DONE    -> DonePhase(state, vm)
         }
 
         state.error?.let { err ->
@@ -176,25 +133,296 @@ fun ManualDraftScreen(
                 )
             }
         }
+    }
+}
 
-        if (state.recommendations.isNotEmpty()) {
-            Spacer(Modifier.height(4.dp))
-            Text(
-                "Top ${state.recommendations.size} · ${state.computedInMs} ms",
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+// ──────────────────────────────────────────────── Barra de progreso del draft
+
+@Composable
+private fun DraftProgressBar(stage: DraftStage, turnIndex: Int) {
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            // Punto de bans
+            StepDot(
+                label = "B",
+                color = BAN_COLOR,
+                active = stage == DraftStage.BANS,
+                done = stage != DraftStage.BANS,
             )
-            LazyColumn(
-                verticalArrangement = Arrangement.spacedBy(10.dp),
-                modifier = Modifier.height((state.recommendations.size * 200).dp),
-            ) {
-                itemsIndexed(state.recommendations) { index, rec ->
-                    RecommendationCard(rec, rank = index + 1)
+            Text("›", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            // Puntos de cada pick
+            PICK_ORDER.forEachIndexed { index, turn ->
+                val color = if (turn.team == Team.OURS) ALLY_COLOR else ENEMY_COLOR
+                StepDot(
+                    label = "${index + 1}",
+                    color = color,
+                    active = stage == DraftStage.PICKING && turnIndex == index,
+                    done = stage == DraftStage.DONE || (stage == DraftStage.PICKING && turnIndex > index),
+                )
+            }
+        }
+        Text(
+            "🟢 tú · 🔴 rival · orden 1-2-2-1",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
+@Composable
+private fun StepDot(label: String, color: Color, active: Boolean, done: Boolean) {
+    val bg = when {
+        active -> color
+        done   -> color.copy(alpha = 0.30f)
+        else   -> MaterialTheme.colorScheme.surfaceVariant
+    }
+    val fg = if (active) Color.White else color
+    Box(
+        modifier = Modifier.size(26.dp).background(bg, CircleShape),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(label, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = fg)
+    }
+}
+
+// ──────────────────────────────────────────────── Resumen de equipos
+
+@Composable
+private fun TeamsSummary(
+    allies: List<BrawlerDto>,
+    enemies: List<BrawlerDto>,
+    bans: List<BrawlerDto>,
+    onRemoveBan: ((BrawlerDto) -> Unit)?,
+) {
+    if (allies.isEmpty() && enemies.isEmpty() && bans.isEmpty()) return
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        if (allies.isNotEmpty()) ChipLine("Tu equipo", allies, ALLY_COLOR, null)
+        if (enemies.isNotEmpty()) ChipLine("Rival", enemies, ENEMY_COLOR, null)
+        if (bans.isNotEmpty()) ChipLine("Baneados (${bans.size}/$MAX_BANS)", bans, BAN_COLOR, onRemoveBan)
+    }
+}
+
+@Composable
+private fun ChipLine(
+    label: String,
+    brawlers: List<BrawlerDto>,
+    color: Color,
+    onRemove: ((BrawlerDto) -> Unit)?,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text(label, style = MaterialTheme.typography.labelMedium, color = color, fontWeight = FontWeight.Bold)
+        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            brawlers.chunked(3).forEach { rowChips ->
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    rowChips.forEach { brawler ->
+                        BrawlerChip(brawler, color, onRemove)
+                    }
                 }
             }
         }
     }
 }
+
+@Composable
+private fun BrawlerChip(brawler: BrawlerDto, color: Color, onRemove: ((BrawlerDto) -> Unit)?) {
+    InputChip(
+        selected = true,
+        onClick = { onRemove?.invoke(brawler) },
+        enabled = onRemove != null,
+        label = { Text(brawler.name, style = MaterialTheme.typography.labelMedium) },
+        trailingIcon = onRemove?.let {
+            { Icon(Icons.Default.Close, contentDescription = "Quitar", modifier = Modifier.size(14.dp)) }
+        },
+        colors = InputChipDefaults.inputChipColors(
+            selectedContainerColor = color.copy(alpha = 0.18f),
+            selectedLabelColor = color,
+            selectedTrailingIconColor = color,
+            disabledSelectedContainerColor = color.copy(alpha = 0.18f),
+        ),
+    )
+}
+
+// ──────────────────────────────────────────────── Fase de bans
+
+@Composable
+private fun BansPhase(state: DraftUiState, vm: DraftViewModel) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(
+            "Fase de bans · ${state.bans.size}/$MAX_BANS",
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold,
+        )
+        Text(
+            "Agrega los 6 brawlers baneados (3 tuyos + 3 del rival). Puedes empezar con menos.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+
+        if (state.bans.size < MAX_BANS) {
+            BrawlerSearchBox(
+                search = state.search,
+                hint = "Busca un brawler para banear…",
+                onQueryChange = vm::setSearchQuery,
+                onSelect = vm::addBan,
+                onDismiss = vm::dismissSearchDropdown,
+            )
+        }
+
+        Button(
+            onClick = vm::startPicks,
+            enabled = state.selectedMap != null,
+            modifier = Modifier.fillMaxWidth(),
+        ) { Text("Empezar picks →") }
+    }
+}
+
+// ──────────────────────────────────────────────── Fase de picks
+
+@Composable
+private fun PickingPhase(state: DraftUiState, vm: DraftViewModel) {
+    val turn = state.currentTurn ?: return
+    val turnNum = state.turnIndex + 1
+
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        // Cabecera del turno
+        val (titulo, color) = if (turn.team == Team.OURS) {
+            "Turno $turnNum/6 · Tu pick" to ALLY_COLOR
+        } else {
+            "Turno $turnNum/6 · Pick del rival" to ENEMY_COLOR
+        }
+        Surface(
+            shape = MaterialTheme.shapes.medium,
+            color = color.copy(alpha = 0.12f),
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Text(
+                titulo,
+                modifier = Modifier.padding(12.dp),
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = color,
+            )
+        }
+
+        if (turn.team == Team.ENEMY) {
+            Text(
+                "¿Qué brawler eligió el rival?",
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            BrawlerSearchBox(
+                search = state.search,
+                hint = "Busca el pick del rival…",
+                onQueryChange = vm::setSearchQuery,
+                onSelect = vm::pickCurrentTurn,
+                onDismiss = vm::dismissSearchDropdown,
+            )
+        } else {
+            // Turno nuestro: recomendaciones + búsqueda manual opcional
+            if (state.loading) {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
+                    CircularProgressIndicator()
+                }
+            }
+            if (state.recommendations.isNotEmpty()) {
+                Text(
+                    "Recomendados · ${state.computedInMs} ms · toca para elegir",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                state.recommendations.forEachIndexed { index, rec ->
+                    RecommendationCard(
+                        rec = rec,
+                        rank = index + 1,
+                        onClick = {
+                            vm.pickCurrentTurn(BrawlerDto(id = rec.brawlerId, name = rec.brawlerName, slug = ""))
+                        },
+                    )
+                }
+            }
+            Text(
+                "¿Prefieres otro? Búscalo:",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            BrawlerSearchBox(
+                search = state.search,
+                hint = "Elegir otro brawler…",
+                onQueryChange = vm::setSearchQuery,
+                onSelect = vm::pickCurrentTurn,
+                onDismiss = vm::dismissSearchDropdown,
+            )
+        }
+
+        OutlinedButton(onClick = vm::resetDraft, modifier = Modifier.fillMaxWidth()) {
+            Text("Reiniciar draft")
+        }
+    }
+}
+
+// ──────────────────────────────────────────────── Fase final
+
+@Composable
+private fun DonePhase(state: DraftUiState, vm: DraftViewModel) {
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Surface(
+            shape = MaterialTheme.shapes.medium,
+            color = ALLY_COLOR.copy(alpha = 0.12f),
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Text(
+                "✓ Draft completo",
+                modifier = Modifier.padding(12.dp),
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = ALLY_COLOR,
+            )
+        }
+        Button(onClick = vm::resetDraft, modifier = Modifier.fillMaxWidth()) {
+            Text("Nuevo draft")
+        }
+    }
+}
+
+// ──────────────────────────────────────────────── Buscador de brawlers reutilizable
+
+@Composable
+private fun BrawlerSearchBox(
+    search: SearchState,
+    hint: String,
+    onQueryChange: (String) -> Unit,
+    onSelect: (BrawlerDto) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    Box(modifier = Modifier.fillMaxWidth()) {
+        OutlinedTextField(
+            value = search.query,
+            onValueChange = onQueryChange,
+            placeholder = { Text(hint, style = MaterialTheme.typography.bodySmall) },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth(),
+            textStyle = MaterialTheme.typography.bodyMedium,
+        )
+        DropdownMenu(
+            expanded = search.expanded && search.suggestions.isNotEmpty(),
+            onDismissRequest = onDismiss,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            search.suggestions.forEachIndexed { index, brawler ->
+                DropdownMenuItem(
+                    text = { Text(brawler.name, style = MaterialTheme.typography.bodyMedium) },
+                    onClick = { onSelect(brawler) },
+                )
+                if (index < search.suggestions.lastIndex) HorizontalDivider()
+            }
+        }
+    }
+}
+
+// ──────────────────────────────────────────────── Buscador de mapa
 
 @Composable
 private fun MapSearchField(
@@ -211,7 +439,7 @@ private fun MapSearchField(
             value = query,
             onValueChange = onQueryChange,
             label = { Text("Mapa") },
-            placeholder = { Text("Ej: Hard Rock Mine, Har…") },
+            placeholder = { Text("Ej: Hard Rock Mine…") },
             singleLine = true,
             modifier = Modifier.fillMaxWidth(),
             supportingText = selectedMap?.let {
@@ -238,27 +466,26 @@ private fun MapSearchField(
                     },
                     onClick = { onSelect(map) },
                 )
-                if (index < suggestions.lastIndex) {
-                    HorizontalDivider()
-                }
+                if (index < suggestions.lastIndex) HorizontalDivider()
             }
         }
     }
 }
 
+// ──────────────────────────────────────────────── Tarjeta de recomendación
+
 @Composable
-private fun RecommendationCard(rec: DraftRecommendationDto, rank: Int) {
+private fun RecommendationCard(rec: DraftRecommendationDto, rank: Int, onClick: () -> Unit) {
     val maxScore = 1.5f
     val normalizedScore = (rec.score.toFloat() / maxScore).coerceIn(0f, 1f)
     val color = scoreColor(normalizedScore)
 
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
     ) {
         Column(modifier = Modifier.padding(14.dp)) {
-
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -280,11 +507,7 @@ private fun RecommendationCard(rec: DraftRecommendationDto, rank: Int) {
                         }
                     }
                     Spacer(Modifier.width(10.dp))
-                    Text(
-                        rec.brawlerName,
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                    )
+                    Text(rec.brawlerName, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                 }
                 Text(
                     "%.2f".format(rec.score),
@@ -299,8 +522,7 @@ private fun RecommendationCard(rec: DraftRecommendationDto, rank: Int) {
 
             rec.explanation?.let {
                 Spacer(Modifier.height(6.dp))
-                Text(it, style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
 
             if (rec.breakdown.isNotEmpty()) {
@@ -310,10 +532,7 @@ private fun RecommendationCard(rec: DraftRecommendationDto, rank: Int) {
                     .sortedByDescending { (_, v) -> kotlin.math.abs(v) }
                     .take(4)
                     .forEach { (key, value) ->
-                        FactorRow(
-                            label = FACTOR_LABELS[key] ?: key,
-                            value = value.toFloat(),
-                        )
+                        FactorRow(label = FACTOR_LABELS[key] ?: key, value = value.toFloat())
                     }
             }
         }
@@ -323,11 +542,7 @@ private fun RecommendationCard(rec: DraftRecommendationDto, rank: Int) {
 @Composable
 private fun AnimatedBar(progress: Float, color: Color) {
     var target by remember { mutableFloatStateOf(0f) }
-    val animated by animateFloatAsState(
-        targetValue = target,
-        animationSpec = tween(600),
-        label = "score_bar",
-    )
+    val animated by animateFloatAsState(targetValue = target, animationSpec = tween(600), label = "score_bar")
     LaunchedEffect(progress) { target = progress }
     LinearProgressIndicator(
         progress = { animated },
@@ -346,7 +561,6 @@ private fun FactorRow(label: String, value: Float) {
         else           -> MaterialTheme.colorScheme.outlineVariant
     }
     val absNorm = (kotlin.math.abs(value) / 0.6f).coerceIn(0f, 1f)
-
     Row(
         modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
         verticalAlignment = Alignment.CenterVertically,

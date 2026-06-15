@@ -24,16 +24,32 @@ enum class Team { OURS, ENEMY }
 // Un turno de pick: quién elige y con qué fase se le pide al motor de scoring.
 data class PickTurn(val team: Team, val phase: DraftPhase)
 
-// Orden real del draft competitivo de Brawl Stars: 1-2-2-1.
-// Nosotros (first pick) → rival x2 → nosotros x2 → rival (last pick).
-val PICK_ORDER: List<PickTurn> = listOf(
-    PickTurn(Team.OURS, DraftPhase.FIRST_PICK),  // 1
-    PickTurn(Team.ENEMY, DraftPhase.MID_PICKS),  // 2
-    PickTurn(Team.ENEMY, DraftPhase.MID_PICKS),  // 3
-    PickTurn(Team.OURS, DraftPhase.MID_PICKS),   // 4
-    PickTurn(Team.OURS, DraftPhase.MID_PICKS),   // 5
-    PickTurn(Team.ENEMY, DraftPhase.LAST_PICK),  // 6
-)
+/**
+ * Construye el orden 1-2-2-1 del draft según quién tiene el primer pick.
+ *
+ * El draft SIEMPRE es: equipoA(1) → equipoB(2) → equipoA(2) → equipoB(1), donde
+ * A es el de primer pick. Lo único que cambia es si "nosotros" somos A o B.
+ *
+ * - weAreFirst=true  (moneda AZUL): nuestros picks en posiciones 1, 4, 5.
+ * - weAreFirst=false (moneda ROJA): somos el equipo de último pick → 2, 3, 6.
+ *
+ * La fase para el motor: posición 0 = FIRST_PICK, posición 5 = LAST_PICK, resto MID.
+ */
+fun buildPickOrder(weAreFirst: Boolean): List<PickTurn> {
+    val teams = if (weAreFirst) {
+        listOf(Team.OURS, Team.ENEMY, Team.ENEMY, Team.OURS, Team.OURS, Team.ENEMY)
+    } else {
+        listOf(Team.ENEMY, Team.OURS, Team.OURS, Team.ENEMY, Team.ENEMY, Team.OURS)
+    }
+    return teams.mapIndexed { i, team ->
+        val phase = when (i) {
+            0    -> DraftPhase.FIRST_PICK
+            5    -> DraftPhase.LAST_PICK
+            else -> DraftPhase.MID_PICKS
+        }
+        PickTurn(team, phase)
+    }
+}
 
 const val MAX_BANS = 6
 
@@ -51,6 +67,7 @@ data class DraftUiState(
     val selectedMap: MapDto? = MapDto(id = 15000007, name = "Hard Rock Mine", slug = "hard-rock-mine", game_mode = "Gem Grab"),
     val mapDropdownExpanded: Boolean = false,
     // Máquina de estados del draft
+    val weAreFirstPick: Boolean = true,   // moneda azul = true, roja = false
     val stage: DraftStage = DraftStage.BANS,
     val turnIndex: Int = 0,
     val bans: List<BrawlerDto> = emptyList(),
@@ -64,7 +81,8 @@ data class DraftUiState(
     val computedInMs: Int = 0,
     val error: String? = null,
 ) {
-    val currentTurn: PickTurn? get() = PICK_ORDER.getOrNull(turnIndex)
+    val pickOrder: List<PickTurn> get() = buildPickOrder(weAreFirstPick)
+    val currentTurn: PickTurn? get() = pickOrder.getOrNull(turnIndex)
     val isOurTurn: Boolean get() = currentTurn?.team == Team.OURS
 
     /** ¿Hay algo que deshacer? (un ban, un pick, o salir de la fase de picks). */
@@ -160,6 +178,11 @@ class DraftViewModel(
         _state.update { it.copy(bans = it.bans.filter { b -> b.id != brawler.id }) }
     }
 
+    /** Elige el lado: true = moneda azul (primer pick), false = moneda roja (último pick). */
+    fun setSide(firstPick: Boolean) {
+        _state.update { it.copy(weAreFirstPick = firstPick) }
+    }
+
     fun startPicks() {
         if (_state.value.selectedMap == null) {
             _state.update { it.copy(error = "Selecciona un mapa antes de empezar") }
@@ -190,7 +213,7 @@ class DraftViewModel(
     private fun advanceTurn() {
         val next = _state.value.turnIndex + 1
         clearSearch()
-        if (next >= PICK_ORDER.size) {
+        if (next >= _state.value.pickOrder.size) {
             _state.update { it.copy(turnIndex = next, stage = DraftStage.DONE, recommendations = emptyList()) }
             return
         }
@@ -250,16 +273,16 @@ class DraftViewModel(
                 }
             }
             DraftStage.DONE -> {
-                // turnIndex == PICK_ORDER.size; el último turno completado es el último de la lista.
+                // turnIndex == pickOrder.size; el último turno completado es el último de la lista.
                 _state.update { it.copy(stage = DraftStage.PICKING) }
-                undoTurn(PICK_ORDER.size - 1)
+                undoTurn(s.pickOrder.size - 1)
             }
         }
     }
 
     /** Quita el pick hecho en `targetTurn` (su equipo) y deja ese turno como el activo. */
     private fun undoTurn(targetTurn: Int) {
-        val team = PICK_ORDER[targetTurn].team
+        val team = _state.value.pickOrder[targetTurn].team
         _state.update {
             val base = when (team) {
                 Team.OURS  -> it.copy(allies = it.allies.dropLast(1))
@@ -273,12 +296,13 @@ class DraftViewModel(
 
     // --------------------------------------------------------- Control general
 
-    /** Reinicia el draft completo (mantiene el mapa seleccionado). */
+    /** Reinicia el draft completo (mantiene el mapa y el lado elegido). */
     fun resetDraft() {
         _state.update {
             DraftUiState(
                 mapQuery = it.mapQuery,
                 selectedMap = it.selectedMap,
+                weAreFirstPick = it.weAreFirstPick,
             )
         }
     }

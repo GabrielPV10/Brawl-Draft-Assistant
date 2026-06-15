@@ -28,6 +28,9 @@ class Settings(BaseSettings):
 
     supercell_api_key: str = ""
     supercell_api_base: str = "https://api.brawlstars.com/v1"
+    # Proxy con IP fija para llamar a la API de Supercell (Render usa IPs dinámicas
+    # y Supercell exige IP whitelisteada). Ej: http://user:pass@proxy.fixie.com:80
+    supercell_proxy_url: str = ""
 
     # Fuente de estadísticas que usa el job de ingesta (run_daily).
     # "mock" = datos sintéticos; "brawlify" = scraper real (hoy bloqueado por Cloudflare).

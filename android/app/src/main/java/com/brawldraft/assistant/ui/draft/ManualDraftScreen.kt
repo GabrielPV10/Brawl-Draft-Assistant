@@ -106,7 +106,7 @@ fun ManualDraftScreen(
             onDismiss = vm::dismissMapDropdown,
         )
 
-        DraftProgressBar(stage = state.stage, turnIndex = state.turnIndex)
+        DraftProgressBar(stage = state.stage, turnIndex = state.turnIndex, pickOrder = state.pickOrder)
 
         // Estado actual de los tres equipos (siempre visible una vez hay picks/bans).
         TeamsSummary(
@@ -140,7 +140,7 @@ fun ManualDraftScreen(
 // ──────────────────────────────────────────────── Barra de progreso del draft
 
 @Composable
-private fun DraftProgressBar(stage: DraftStage, turnIndex: Int) {
+private fun DraftProgressBar(stage: DraftStage, turnIndex: Int, pickOrder: List<PickTurn>) {
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -155,8 +155,8 @@ private fun DraftProgressBar(stage: DraftStage, turnIndex: Int) {
                 done = stage != DraftStage.BANS,
             )
             Text("›", color = MaterialTheme.colorScheme.onSurfaceVariant)
-            // Puntos de cada pick
-            PICK_ORDER.forEachIndexed { index, turn ->
+            // Puntos de cada pick (el color refleja quién elige en cada turno)
+            pickOrder.forEachIndexed { index, turn ->
                 val color = if (turn.team == Team.OURS) ALLY_COLOR else ENEMY_COLOR
                 StepDot(
                     label = "${index + 1}",
@@ -273,12 +273,67 @@ private fun BansPhase(state: DraftUiState, vm: DraftViewModel) {
             )
         }
 
+        // Selector de moneda: ¿somos primer pick (azul) o último pick (roja)?
+        Spacer(Modifier.height(2.dp))
+        Text("¿Qué moneda te tocó?", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+            CoinOption(
+                emoji = "🔵",
+                title = "Azul",
+                subtitle = "Primer pick",
+                color = Color(0xFF2196F3),
+                selected = state.weAreFirstPick,
+                onClick = { vm.setSide(true) },
+                modifier = Modifier.weight(1f),
+            )
+            CoinOption(
+                emoji = "🔴",
+                title = "Roja",
+                subtitle = "Último pick",
+                color = ENEMY_COLOR,
+                selected = !state.weAreFirstPick,
+                onClick = { vm.setSide(false) },
+                modifier = Modifier.weight(1f),
+            )
+        }
+
         GamerButton(
             text = "EMPEZAR PICKS →",
             onClick = vm::startPicks,
             enabled = state.selectedMap != null,
             modifier = Modifier.fillMaxWidth(),
         )
+    }
+}
+
+@Composable
+private fun CoinOption(
+    emoji: String,
+    title: String,
+    subtitle: String,
+    color: Color,
+    selected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val border = if (selected) color else MaterialTheme.colorScheme.outline
+    Surface(
+        onClick = onClick,
+        shape = MaterialTheme.shapes.medium,
+        color = if (selected) color.copy(alpha = 0.16f) else MaterialTheme.colorScheme.surface,
+        border = androidx.compose.foundation.BorderStroke(if (selected) 2.dp else 1.dp, border),
+        modifier = modifier,
+    ) {
+        Column(
+            modifier = Modifier.padding(12.dp).fillMaxWidth(),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            Text(emoji, style = MaterialTheme.typography.headlineSmall)
+            Text(title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold,
+                color = if (selected) color else MaterialTheme.colorScheme.onSurface)
+            Text(subtitle, style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
     }
 }
 

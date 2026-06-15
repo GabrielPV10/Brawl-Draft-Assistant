@@ -20,6 +20,7 @@ data class DraftRequestDto(
     val bans: List<Int> = emptyList(),
     @SerialName("profile_id") val profileId: Int? = null,
     val slot: Int? = null,
+    val strategy: String = "balanced",
     @SerialName("top_n") val topN: Int = 3,
 )
 

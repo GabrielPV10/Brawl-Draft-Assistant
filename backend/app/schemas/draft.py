@@ -30,6 +30,10 @@ class DraftRequest(BaseModel):
     # Slot para el cual se está recomendando (0=tú, 1=cuate1, 2=cuate2)
     slot: int | None = Field(None, ge=0, le=2)
 
+    # Estrategia de recomendación: ajusta qué factores pesan.
+    # "balanced" (default) | "counter" | "winrate" | "synergy"
+    strategy: str = Field("balanced", description="Preset de pesos del scoring.")
+
     top_n: int = Field(3, ge=1, le=10)
 
 

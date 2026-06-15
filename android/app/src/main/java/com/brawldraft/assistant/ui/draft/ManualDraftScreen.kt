@@ -4,6 +4,7 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -22,6 +23,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -378,7 +380,9 @@ private fun PickingPhase(state: DraftUiState, vm: DraftViewModel) {
                 onDismiss = vm::dismissSearchDropdown,
             )
         } else {
-            // Turno nuestro: recomendaciones + búsqueda manual opcional
+            // Turno nuestro: selector de estrategia + recomendaciones + búsqueda manual
+            StrategySelector(selected = state.strategy, onSelect = vm::setStrategy)
+
             if (state.loading) {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
                     CircularProgressIndicator()
@@ -425,6 +429,29 @@ private fun PickingPhase(state: DraftUiState, vm: DraftViewModel) {
             ) { Text("← Atrás") }
             OutlinedButton(onClick = vm::resetDraft, modifier = Modifier.weight(1f)) {
                 Text("Reiniciar")
+            }
+        }
+    }
+}
+
+@Composable
+private fun StrategySelector(selected: Strategy, onSelect: (Strategy) -> Unit) {
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text(
+            "¿Qué priorizar?",
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+        ) {
+            Strategy.entries.forEach { strat ->
+                FilterChip(
+                    selected = selected == strat,
+                    onClick = { onSelect(strat) },
+                    label = { Text(strat.label, style = MaterialTheme.typography.labelMedium) },
+                )
             }
         }
     }

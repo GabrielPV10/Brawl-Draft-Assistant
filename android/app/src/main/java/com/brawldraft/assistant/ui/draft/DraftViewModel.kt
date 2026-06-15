@@ -53,6 +53,14 @@ fun buildPickOrder(weAreFirst: Boolean): List<PickTurn> {
 
 const val MAX_BANS = 6
 
+// Estrategias de recomendación. `id` debe coincidir con el backend.
+enum class Strategy(val id: String, val label: String) {
+    BALANCED("balanced", "⚖️ Balanceado"),
+    COUNTER("counter", "🛡️ Counter"),
+    WINRATE("winrate", "📈 Winrate"),
+    SYNERGY("synergy", "🤝 Sinergia"),
+}
+
 // Estado del buscador de brawlers compartido por el paso activo (ban o pick).
 data class SearchState(
     val query: String = "",
@@ -68,6 +76,7 @@ data class DraftUiState(
     val mapDropdownExpanded: Boolean = false,
     // Máquina de estados del draft
     val weAreFirstPick: Boolean = true,   // moneda azul = true, roja = false
+    val strategy: Strategy = Strategy.BALANCED,
     val stage: DraftStage = DraftStage.BANS,
     val turnIndex: Int = 0,
     val bans: List<BrawlerDto> = emptyList(),
@@ -183,6 +192,15 @@ class DraftViewModel(
         _state.update { it.copy(weAreFirstPick = firstPick) }
     }
 
+    /** Cambia la estrategia. Si es nuestro turno, recalcula al instante. */
+    fun setStrategy(strategy: Strategy) {
+        if (_state.value.strategy == strategy) return
+        _state.update { it.copy(strategy = strategy) }
+        if (_state.value.stage == DraftStage.PICKING && _state.value.isOurTurn) {
+            fetchRecommendationsIfOurTurn()
+        }
+    }
+
     fun startPicks() {
         if (_state.value.selectedMap == null) {
             _state.update { it.copy(error = "Selecciona un mapa antes de empezar") }
@@ -235,6 +253,7 @@ class DraftViewModel(
                 allies = s.allies.map { it.id },
                 enemies = s.enemies.map { it.id },
                 bans = s.bans.map { it.id },
+                strategy = s.strategy.id,
                 topN = 5,
             )
             repo.recommend(req).fold(
@@ -303,6 +322,7 @@ class DraftViewModel(
                 mapQuery = it.mapQuery,
                 selectedMap = it.selectedMap,
                 weAreFirstPick = it.weAreFirstPick,
+                strategy = it.strategy,
             )
         }
     }

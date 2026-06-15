@@ -52,6 +52,44 @@ class FactorBreakdown:
         }
 
 
+# Presets de estrategia: el usuario decide qué factores importan. Cada preset
+# REEMPLAZA los pesos base (los que no aparecen quedan en su default).
+# "balanced" = vacío = usa los pesos por defecto de la config.
+# Cada preset deja un peso pequeño de winrate como desempate, para que el ranking
+# tenga sentido aun cuando el factor principal esté empatado o sea escaso (p.ej.
+# sinergia con pocos datos). El factor elegido domina; winrate solo desempata.
+STRATEGY_WEIGHTS: dict[str, dict[str, float]] = {
+    "balanced": {},
+    "counter": {
+        "w1_winrate_mapa": 0.3,   # desempate
+        "w2_counter_score": 1.6,  # domina
+        "w3_sinergia": 0.0,
+        "w4_pickrate_relativo": 0.0,
+        "w5_ban_risk": 0.0,
+        "w6_counterable": 0.3,
+        "w7_personal_proficiency": 0.0,
+    },
+    "winrate": {
+        "w1_winrate_mapa": 1.6,   # domina
+        "w2_counter_score": 0.0,
+        "w3_sinergia": 0.0,
+        "w4_pickrate_relativo": 0.3,
+        "w5_ban_risk": 0.0,
+        "w6_counterable": 0.0,
+        "w7_personal_proficiency": 0.0,
+    },
+    "synergy": {
+        "w1_winrate_mapa": 0.4,   # desempate
+        "w2_counter_score": 0.0,
+        "w3_sinergia": 1.6,       # domina
+        "w4_pickrate_relativo": 0.0,
+        "w5_ban_risk": 0.0,
+        "w6_counterable": 0.0,
+        "w7_personal_proficiency": 0.0,
+    },
+}
+
+
 # Multiplicadores aplicados a los pesos base por fase del draft.
 # Ver tabla en docs/algoritmo-draft.md.
 PHASE_WEIGHT_MULTIPLIERS: dict[DraftPhase, dict[str, float]] = {
@@ -78,7 +116,7 @@ class ScoringEngine:
 
     def score_candidates(self, req: DraftRequest) -> list[DraftRecommendation]:
         """Calcula y rankea todos los brawlers candidatos."""
-        adjusted = self._adjust_weights(req.phase)
+        adjusted = self._resolve_weights(req)
 
         # Precarga de datos comunes para evitar N+1 queries
         target_tag = self._target_player_tag(req)
@@ -103,15 +141,26 @@ class ScoringEngine:
 
     # ---------------------------------------------------------------- private
 
-    def _adjust_weights(self, phase: DraftPhase) -> ScoringWeights:
-        """Ajusta pesos según la fase aplicando los multiplicadores de la tabla."""
+    def _resolve_weights(self, req: DraftRequest) -> ScoringWeights:
+        """Pesos finales = preset de estrategia, luego multiplicadores de fase.
+
+        Primero la estrategia elegida por el usuario reemplaza los pesos base
+        (counter/winrate/synergy/balanced); después se aplican los ajustes por
+        fase del draft sobre ese resultado.
+        """
+        base = self.weights
+        preset = STRATEGY_WEIGHTS.get(req.strategy, {})
+        if preset:
+            base = base.model_copy(update=preset)
+        return self._adjust_weights(base, req.phase)
+
+    def _adjust_weights(self, base: ScoringWeights, phase: DraftPhase) -> ScoringWeights:
+        """Aplica los multiplicadores de fase sobre `base`."""
         multipliers = PHASE_WEIGHT_MULTIPLIERS.get(phase, {})
         if not multipliers:
-            return self.weights
-        kwargs = {
-            attr: getattr(self.weights, attr) * mult for attr, mult in multipliers.items()
-        }
-        return self.weights.model_copy(update=kwargs)
+            return base
+        kwargs = {attr: getattr(base, attr) * mult for attr, mult in multipliers.items()}
+        return base.model_copy(update=kwargs)
 
     def _enumerate_candidates(
         self, req: DraftRequest, target_tag: str | None

@@ -6,6 +6,11 @@ import com.brawldraft.assistant.data.DraftRepository
 import com.brawldraft.assistant.data.api.dto.DraftPhase
 import com.brawldraft.assistant.data.api.dto.DraftRecommendationDto
 import com.brawldraft.assistant.data.api.dto.DraftRequestDto
+import com.brawldraft.assistant.data.api.dto.MapDto
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -13,7 +18,10 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 data class DraftUiState(
-    val mapIdInput: String = "15040002",
+    val mapQuery: String = "Hard Rock Mine",
+    val mapSuggestions: List<MapDto> = emptyList(),
+    val selectedMap: MapDto? = MapDto(id = 15000007, name = "Hard Rock Mine", slug = "hard-rock-mine", game_mode = "Gem Grab"),
+    val mapDropdownExpanded: Boolean = false,
     val phase: DraftPhase = DraftPhase.FIRST_PICK,
     val alliesInput: String = "",
     val enemiesInput: String = "",
@@ -31,7 +39,36 @@ class DraftViewModel(
     private val _state = MutableStateFlow(DraftUiState())
     val state: StateFlow<DraftUiState> = _state.asStateFlow()
 
-    fun setMapId(text: String) = _state.update { it.copy(mapIdInput = text) }
+    private var searchJob: Job? = null
+
+    fun setMapQuery(text: String) {
+        _state.update { it.copy(mapQuery = text, selectedMap = null, mapDropdownExpanded = true) }
+        searchJob?.cancel()
+        if (text.length < 2) {
+            _state.update { it.copy(mapSuggestions = emptyList()) }
+            return
+        }
+        searchJob = viewModelScope.launch {
+            delay(300)
+            repo.searchMap(text).onSuccess { results ->
+                _state.update { it.copy(mapSuggestions = results, mapDropdownExpanded = results.isNotEmpty()) }
+            }
+        }
+    }
+
+    fun selectMap(map: MapDto) {
+        _state.update {
+            it.copy(
+                selectedMap = map,
+                mapQuery = "${map.name} · ${map.game_mode}",
+                mapSuggestions = emptyList(),
+                mapDropdownExpanded = false,
+            )
+        }
+    }
+
+    fun dismissMapDropdown() = _state.update { it.copy(mapDropdownExpanded = false) }
+
     fun setPhase(phase: DraftPhase) = _state.update { it.copy(phase = phase) }
     fun setAllies(text: String) = _state.update { it.copy(alliesInput = text) }
     fun setEnemies(text: String) = _state.update { it.copy(enemiesInput = text) }
@@ -57,36 +94,52 @@ class DraftViewModel(
 
     fun recommend() {
         val current = _state.value
-        val mapId = current.mapIdInput.toIntOrNull()
+        val mapId = current.selectedMap?.id
         if (mapId == null) {
-            _state.update { it.copy(error = "map_id inválido") }
+            _state.update { it.copy(error = "Selecciona un mapa del listado") }
             return
         }
-        val req = DraftRequestDto(
-            mapId = mapId,
-            phase = current.phase,
-            allies = parseIds(current.alliesInput),
-            enemies = parseIds(current.enemiesInput),
-            bans = parseIds(current.bansInput),
-        )
         _state.update { it.copy(loading = true, error = null) }
         viewModelScope.launch {
-            repo.recommend(req).fold(
-                onSuccess = { resp ->
-                    _state.update {
-                        it.copy(
-                            loading = false,
-                            recommendations = resp.recommendations,
-                            computedInMs = resp.computedInMs,
-                        )
-                    }
-                },
-                onFailure = { e -> _state.update { it.copy(loading = false, error = e.message) } },
-            )
+            try {
+                val (allies, enemies, bans) = listOf(
+                    async { resolveIds(current.alliesInput) },
+                    async { resolveIds(current.enemiesInput) },
+                    async { resolveIds(current.bansInput) },
+                ).awaitAll()
+
+                val req = DraftRequestDto(
+                    mapId = mapId,
+                    phase = current.phase,
+                    allies = allies,
+                    enemies = enemies,
+                    bans = bans,
+                )
+                repo.recommend(req).fold(
+                    onSuccess = { resp ->
+                        _state.update {
+                            it.copy(
+                                loading = false,
+                                recommendations = resp.recommendations,
+                                computedInMs = resp.computedInMs,
+                            )
+                        }
+                    },
+                    onFailure = { e ->
+                        _state.update { it.copy(loading = false, error = e.message) }
+                    },
+                )
+            } catch (e: Exception) {
+                _state.update { it.copy(loading = false, error = e.message) }
+            }
         }
     }
 
-    private fun parseIds(input: String): List<Int> =
-        input.split(',', ' ', ';')
-            .mapNotNull { it.trim().toIntOrNull() }
+    private suspend fun resolveIds(input: String): List<Int> {
+        val tokens = input.split(',', ';').map { it.trim() }.filter { it.isNotEmpty() }
+        return tokens.mapNotNull { token ->
+            token.toIntOrNull()
+                ?: repo.searchBrawler(token).getOrNull()?.firstOrNull()?.id
+        }
+    }
 }

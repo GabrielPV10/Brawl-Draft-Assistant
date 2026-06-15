@@ -25,12 +25,20 @@ from scrapers.sources.base import (
 # Roster real (slugs en el mismo formato que produce scripts.seed_catalog._slugify),
 # para que run_daily encuentre el brawler_id al hacer el join contra la BD sembrada.
 ROSTER: tuple[str, ...] = (
-    "shelly", "colt", "bull", "brock", "el-primo", "barley", "poco", "rosa",
-    "jessie", "nita", "dynamike", "tick", "8-bit", "rico", "darryl", "penny",
-    "carl", "jacky", "piper", "pam", "frank", "bibi", "bea", "nani",
-    "edgar", "griff", "bonnie", "mortis", "tara", "gene", "max", "mr-p",
-    "byron", "lou", "belle", "buzz", "ash", "mandy", "otis", "sam",
-    "gus", "buster", "chester", "gray", "mico", "kit", "melodie", "angelo",
+    "8-bit", "alli", "amber", "angelo", "ash", "barley", "bea", "belle",
+    "berry", "bibi", "bo", "bolt", "bonnie", "brock", "bull", "buster",
+    "buzz", "buzz-lightyear", "byron", "carl", "charlie", "chester", "chuck",
+    "clancy", "colette", "colt", "cordelius", "crow", "damian", "darryl",
+    "doug", "draco", "dynamike", "edgar", "el-primo", "emz", "eve", "fang",
+    "finx", "frank", "gale", "gene", "gigi", "glowy", "gray", "griff",
+    "grom", "gus", "hank", "jacky", "jae-yong", "janet", "jessie", "juju",
+    "kaze", "kenji", "kit", "larry-and-lawrie", "leon", "lily", "lola",
+    "lou", "lumi", "maisie", "mandy", "max", "meeple", "meg", "melodie",
+    "mico", "mina", "moe", "mortis", "mr-p", "najia", "nani", "nita",
+    "ollie", "otis", "pam", "pearl", "penny", "pierce", "piper", "poco",
+    "rico", "rosa", "r-t", "ruffs", "sam", "sandy", "shade", "shelly",
+    "sirius", "spike", "sprout", "squeak", "starr-nova", "stu", "surge",
+    "tara", "tick", "trunk", "willow", "ziggy",
 )
 
 

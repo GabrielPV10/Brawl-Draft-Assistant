@@ -21,7 +21,7 @@ android {
 
         // Base URL del backend. Para emulador, 10.0.2.2 mapea al host.
         // Para dispositivo físico, sobrescribir con la IP de la PC en local.properties.
-        buildConfigField("String", "API_BASE_URL", "\"http://10.0.2.2:8000\"")
+        buildConfigField("String", "API_BASE_URL", "\"http://192.168.0.181:8000\"")
     }
 
     buildTypes {

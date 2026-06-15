@@ -16,7 +16,7 @@ Los sub-cálculos viven en métodos separados para poder testearlos aisladamente
 
 from __future__ import annotations
 
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 
 from sqlalchemy import and_, func, select
 from sqlalchemy.orm import Session
@@ -111,7 +111,7 @@ class ScoringEngine:
         kwargs = {
             attr: getattr(self.weights, attr) * mult for attr, mult in multipliers.items()
         }
-        return replace(self.weights, **kwargs)
+        return self.weights.model_copy(update=kwargs)
 
     def _enumerate_candidates(
         self, req: DraftRequest, target_tag: str | None

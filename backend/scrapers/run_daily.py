@@ -87,36 +87,55 @@ async def run(map_slug: str | None = None, source: MapStatsSource | None = None)
 
 def _load_map_slugs() -> list[str]:
     with SessionLocal() as db:
-        return [row.slug for row in db.execute(select(Map)).scalars().all()]
+        # Deduplica por slug: un slug con varios IDs de rotación solo se fetchea una vez.
+        seen: set[str] = set()
+        slugs: list[str] = []
+        for row in db.execute(select(Map)).scalars().all():
+            if row.slug not in seen:
+                seen.add(row.slug)
+                slugs.append(row.slug)
+        return slugs
 
 
 def _slug_to_brawler_id(db) -> dict[str, int]:
     return {row.slug.lower(): row.id for row in db.execute(select(Brawler)).scalars().all()}
 
 
-def _slug_to_map_id(db) -> dict[str, int]:
-    return {row.slug.lower(): row.id for row in db.execute(select(Map)).scalars().all()}
+def _slug_to_all_map_ids(db) -> dict[str, list[int]]:
+    """Devuelve slug → [id1, id2, …] (un slug puede tener varios IDs de rotación)."""
+    result: dict[str, list[int]] = {}
+    for row in db.execute(select(Map)).scalars().all():
+        result.setdefault(row.slug.lower(), []).append(row.id)
+    return result
 
 
 def _persist(res: MapScrapeResult) -> tuple[int, int]:
-    """Upsert map_stats y synergies. Devuelve (filas_stats, filas_synergies)."""
+    """Upsert map_stats y synergies para todos los IDs que comparten el slug.
+
+    Un mismo slug (ej. 'hard-rock-mine') puede aparecer con varios map_ids en
+    la tabla maps (distintas rotaciones). Si solo guardamos para uno, el scoring
+    devuelve winrate=0 al buscar por cualquier otro ID. Guardamos para todos.
+    """
     if not res.stats and not res.team_comps:
         return 0, 0
 
     with SessionLocal() as db:
         brawler_ids = _slug_to_brawler_id(db)
-        map_ids = _slug_to_map_id(db)
-        map_id = map_ids.get(res.map_slug.lower())
-        if map_id is None:
+        slug_to_ids = _slug_to_all_map_ids(db)
+        map_ids = slug_to_ids.get(res.map_slug.lower())
+        if not map_ids:
             logger.warning(
                 "Mapa %s no está en la BD; corre seed_catalog antes.", res.map_slug
             )
             return 0, 0
 
-        stats_count = _upsert_map_stats(db, map_id, brawler_ids, res)
-        synergy_count = _upsert_team_comps_as_synergies(db, map_id, brawler_ids, res)
+        total_stats = 0
+        total_synergies = 0
+        for map_id in map_ids:
+            total_stats += _upsert_map_stats(db, map_id, brawler_ids, res)
+            total_synergies += _upsert_team_comps_as_synergies(db, map_id, brawler_ids, res)
         db.commit()
-        return stats_count, synergy_count
+        return total_stats, total_synergies
 
 
 def _upsert_map_stats(

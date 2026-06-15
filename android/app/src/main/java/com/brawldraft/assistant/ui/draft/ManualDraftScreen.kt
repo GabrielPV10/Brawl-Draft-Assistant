@@ -20,7 +20,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -54,6 +53,8 @@ import com.brawldraft.assistant.data.api.dto.BrawlerDto
 import com.brawldraft.assistant.data.api.dto.DraftPhase
 import com.brawldraft.assistant.data.api.dto.DraftRecommendationDto
 import com.brawldraft.assistant.data.api.dto.MapDto
+import com.brawldraft.assistant.ui.theme.FireGradient
+import com.brawldraft.assistant.ui.theme.GamerButton
 
 private val ALLY_COLOR = Color(0xFF4CAF50)
 private val ENEMY_COLOR = Color(0xFFF44336)
@@ -90,9 +91,9 @@ fun ManualDraftScreen(
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Text(
-            "Brawl Draft Assistant",
-            style = MaterialTheme.typography.headlineSmall,
-            fontWeight = FontWeight.Bold,
+            "BRAWL DRAFT",
+            style = MaterialTheme.typography.headlineMedium.copy(brush = FireGradient),
+            fontWeight = FontWeight.Black,
         )
 
         MapSearchField(
@@ -272,11 +273,12 @@ private fun BansPhase(state: DraftUiState, vm: DraftViewModel) {
             )
         }
 
-        Button(
+        GamerButton(
+            text = "EMPEZAR PICKS →",
             onClick = vm::startPicks,
             enabled = state.selectedMap != null,
             modifier = Modifier.fillMaxWidth(),
-        ) { Text("Empezar picks →") }
+        )
     }
 }
 
@@ -357,8 +359,18 @@ private fun PickingPhase(state: DraftUiState, vm: DraftViewModel) {
             )
         }
 
-        OutlinedButton(onClick = vm::resetDraft, modifier = Modifier.fillMaxWidth()) {
-            Text("Reiniciar draft")
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            OutlinedButton(
+                onClick = vm::undoLastStep,
+                enabled = state.canUndo,
+                modifier = Modifier.weight(1f),
+            ) { Text("← Atrás") }
+            OutlinedButton(onClick = vm::resetDraft, modifier = Modifier.weight(1f)) {
+                Text("Reiniciar")
+            }
         }
     }
 }
@@ -381,8 +393,18 @@ private fun DonePhase(state: DraftUiState, vm: DraftViewModel) {
                 color = ALLY_COLOR,
             )
         }
-        Button(onClick = vm::resetDraft, modifier = Modifier.fillMaxWidth()) {
-            Text("Nuevo draft")
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            OutlinedButton(onClick = vm::undoLastStep, modifier = Modifier.weight(1f)) {
+                Text("← Corregir último")
+            }
+            GamerButton(
+                text = "NUEVO DRAFT",
+                onClick = vm::resetDraft,
+                modifier = Modifier.weight(1f),
+            )
         }
     }
 }

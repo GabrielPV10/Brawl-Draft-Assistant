@@ -4,7 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import get_settings
-from app.routers import brawlers, health, maps, profiles, recommend, team
+from app.routers import admin, brawlers, health, maps, profiles, recommend, team
 
 settings = get_settings()
 
@@ -26,6 +26,7 @@ app.add_middleware(
 )
 
 app.include_router(health.router)
+app.include_router(admin.router)
 app.include_router(brawlers.router)
 app.include_router(maps.router)
 app.include_router(recommend.router)

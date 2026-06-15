@@ -1,46 +1,50 @@
 package com.brawldraft.assistant.ui.theme
 
-import android.os.Build
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
-import androidx.compose.material3.dynamicDarkColorScheme
-import androidx.compose.material3.dynamicLightColorScheme
-import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.graphics.Color
 
-private val DarkColorScheme = darkColorScheme(
-    primary = BrawlRed80,
-    secondary = BrawlYellow80,
-    tertiary = BrawlBlue80
-)
+// Esquema de color fijo (sin dynamicColor): siempre el tema fuego de Amber,
+// en modo oscuro, independiente del fondo de pantalla del usuario.
+private val AmberFireColorScheme = darkColorScheme(
+    primary = FireOrange,
+    onPrimary = WarmWhite,
+    primaryContainer = PurpleDeep,
+    onPrimaryContainer = WarmWhite,
 
-private val LightColorScheme = lightColorScheme(
-    primary = BrawlRed40,
-    secondary = BrawlYellow40,
-    tertiary = BrawlBlue40
+    secondary = Purple,
+    onSecondary = WarmWhite,
+    secondaryContainer = PurpleDeep,
+    onSecondaryContainer = PurpleLight,
+
+    tertiary = Gold,
+    onTertiary = BgDeep,
+
+    background = BgDeep,
+    onBackground = WarmWhite,
+
+    surface = SurfaceWarm,
+    onSurface = WarmWhite,
+    surfaceVariant = SurfaceWarm2,
+    onSurfaceVariant = WarmMuted,
+
+    outline = OutlineWarm,
+    outlineVariant = OutlineWarm,
+
+    error = AmberRed,
+    onError = WarmWhite,
+    errorContainer = Color(0xFF3D1212),
+    onErrorContainer = Color(0xFFFFB4AB),
 )
 
 @Composable
 fun BrawlDraftAssistantTheme(
-    darkTheme: Boolean = isSystemInDarkTheme(),
-    dynamicColor: Boolean = true,
-    content: @Composable () -> Unit
+    content: @Composable () -> Unit,
 ) {
-    val colorScheme = when {
-        dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
-            val context = LocalContext.current
-            if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
-        }
-
-        darkTheme -> DarkColorScheme
-        else -> LightColorScheme
-    }
-
     MaterialTheme(
-        colorScheme = colorScheme,
+        colorScheme = AmberFireColorScheme,
         typography = Typography,
-        content = content
+        content = content,
     )
 }

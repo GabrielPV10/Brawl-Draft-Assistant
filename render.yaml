@@ -1,0 +1,23 @@
+# Render Blueprint para el backend FastAPI del Brawl Draft Assistant.
+# Render lee este archivo al conectar el repo y crea el servicio automáticamente.
+# Las variables marcadas `sync: false` se piden de forma segura en el dashboard
+# (no se guardan en el repo): ahí pegas el DATABASE_URL de Neon y tu ADMIN_TOKEN.
+services:
+  - type: web
+    name: brawl-draft-assistant
+    runtime: python
+    rootDir: backend
+    plan: free
+    branch: main
+    buildCommand: pip install -r requirements.txt
+    # Aplica migraciones (crea tablas) y arranca el servidor en el puerto que da Render.
+    startCommand: alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.12.4"
+      - key: STATS_SOURCE
+        value: mock
+      - key: DATABASE_URL      # ← pegar el connection string de Neon (secreto)
+        sync: false
+      - key: ADMIN_TOKEN       # ← inventa una contraseña larga para /admin/bootstrap
+        sync: false

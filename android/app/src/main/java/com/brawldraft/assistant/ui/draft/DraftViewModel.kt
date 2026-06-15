@@ -66,6 +66,13 @@ data class DraftUiState(
 ) {
     val currentTurn: PickTurn? get() = PICK_ORDER.getOrNull(turnIndex)
     val isOurTurn: Boolean get() = currentTurn?.team == Team.OURS
+
+    /** ¿Hay algo que deshacer? (un ban, un pick, o salir de la fase de picks). */
+    val canUndo: Boolean get() = when (stage) {
+        DraftStage.BANS    -> bans.isNotEmpty()
+        DraftStage.PICKING -> turnIndex > 0 || bans.isNotEmpty()
+        DraftStage.DONE    -> true
+    }
 }
 
 class DraftViewModel(
@@ -119,7 +126,7 @@ class DraftViewModel(
             return
         }
         brawlerSearchJob = viewModelScope.launch {
-            delay(250)
+            delay(120)
             repo.searchBrawler(query).onSuccess { results ->
                 val taken = takenBrawlerIds()
                 val filtered = results.filter { it.id !in taken }
@@ -214,6 +221,54 @@ class DraftViewModel(
                 onFailure = { e -> _state.update { it.copy(loading = false, error = e.message) } },
             )
         }
+    }
+
+    /**
+     * Deshace el último paso del draft. Si te equivocaste en un pick, retrocede un
+     * turno y borra ese brawler (sin reiniciar todo). Funciona en cadena.
+     *
+     * - En PICKING turno >0: quita el pick del turno anterior y vuelve a ese turno.
+     * - En PICKING turno 0: regresa a la fase de bans.
+     * - En DONE: vuelve al último turno y deshace el último pick.
+     */
+    fun undoLastStep() {
+        val s = _state.value
+        when (s.stage) {
+            DraftStage.BANS -> {
+                // En bans, deshacer = quitar el último baneado agregado.
+                if (s.bans.isNotEmpty()) {
+                    _state.update { it.copy(bans = it.bans.dropLast(1)) }
+                    clearSearch()
+                }
+            }
+            DraftStage.PICKING -> {
+                if (s.turnIndex == 0) {
+                    _state.update { it.copy(stage = DraftStage.BANS, recommendations = emptyList(), loading = false) }
+                    clearSearch()
+                } else {
+                    undoTurn(s.turnIndex - 1)
+                }
+            }
+            DraftStage.DONE -> {
+                // turnIndex == PICK_ORDER.size; el último turno completado es el último de la lista.
+                _state.update { it.copy(stage = DraftStage.PICKING) }
+                undoTurn(PICK_ORDER.size - 1)
+            }
+        }
+    }
+
+    /** Quita el pick hecho en `targetTurn` (su equipo) y deja ese turno como el activo. */
+    private fun undoTurn(targetTurn: Int) {
+        val team = PICK_ORDER[targetTurn].team
+        _state.update {
+            val base = when (team) {
+                Team.OURS  -> it.copy(allies = it.allies.dropLast(1))
+                Team.ENEMY -> it.copy(enemies = it.enemies.dropLast(1))
+            }
+            base.copy(turnIndex = targetTurn, recommendations = emptyList(), loading = false, error = null)
+        }
+        clearSearch()
+        fetchRecommendationsIfOurTurn()
     }
 
     // --------------------------------------------------------- Control general

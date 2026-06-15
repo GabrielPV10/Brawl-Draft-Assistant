@@ -33,6 +33,9 @@ class Settings(BaseSettings):
     # "mock" = datos sintéticos; "brawlify" = scraper real (hoy bloqueado por Cloudflare).
     stats_source: str = "mock"
 
+    # Token para el endpoint /admin/bootstrap (poblar DB en la nube). Vacío = deshabilitado.
+    admin_token: str = ""
+
     brawlify_base_url: str = "https://brawlify.com"
     brawlify_user_agent: str = "BrawlDraftAssistant/0.1"
     brawlify_rate_limit_seconds: float = 1.0

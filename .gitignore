@@ -40,3 +40,6 @@ backend/*.egg-info/
 # --- Misc ------------------------------------------------------------------
 .env
 *.log
+
+# --- Datos locales scrapeados (generados por scrape_brawlify_playwright) ---
+backend/data/

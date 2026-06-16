@@ -33,7 +33,7 @@ class Settings(BaseSettings):
     supercell_proxy_url: str = ""
 
     # Fuente de estadísticas que usa el job de ingesta (run_daily).
-    # "mock" = datos sintéticos; "brawlify" = scraper real (hoy bloqueado por Cloudflare).
+    # "mock" = sintéticos; "json" = archivo local scrapeado con Playwright; "brawlify" = HTML bloqueado por Cloudflare.
     stats_source: str = "mock"
 
     # Token para el endpoint /admin/bootstrap (poblar DB en la nube). Vacío = deshabilitado.

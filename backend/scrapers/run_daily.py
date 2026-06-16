@@ -29,6 +29,7 @@ from scrapers.sources.base import (
     MapScrapeResult,
     MapStatsSource,
 )
+from scrapers.sources.json_file import JsonFileStatsSource
 from scrapers.sources.mock import MockStatsSource
 
 logger = logging.getLogger("scrapers.run_daily")
@@ -45,7 +46,9 @@ def make_source() -> MapStatsSource:
         return MockStatsSource()
     if name == "brawlify":
         return BrawlifyStatsSource()
-    raise ValueError(f"stats_source desconocido: {name!r} (usa 'mock' o 'brawlify')")
+    if name == "json":
+        return JsonFileStatsSource()
+    raise ValueError(f"stats_source desconocido: {name!r} (usa 'mock', 'brawlify' o 'json')")
 
 
 async def run(map_slug: str | None = None, source: MapStatsSource | None = None) -> None:

@@ -8,6 +8,8 @@ import com.brawldraft.assistant.data.api.dto.DraftResponseDto
 import com.brawldraft.assistant.data.api.dto.ProfileCreateRequest
 import com.brawldraft.assistant.data.api.dto.ProfileDto
 import com.brawldraft.assistant.data.api.dto.ProfileUpdateRequest
+import com.brawldraft.assistant.data.api.dto.EvaluateRequestDto
+import com.brawldraft.assistant.data.api.dto.EvaluateResponseDto
 import com.brawldraft.assistant.data.api.dto.TeamProficiencyRequest
 import com.brawldraft.assistant.data.api.dto.TeamProficiencyResponse
 import retrofit2.http.Body
@@ -37,6 +39,9 @@ interface ApiService {
 
     @GET("/recommend/dummy")
     suspend fun recommendDummy(): DraftResponseDto
+
+    @POST("/team/evaluate")
+    suspend fun evaluateTeam(@Body req: EvaluateRequestDto): EvaluateResponseDto
 
     @POST("/team/proficiency")
     suspend fun teamProficiency(@Body req: TeamProficiencyRequest): TeamProficiencyResponse

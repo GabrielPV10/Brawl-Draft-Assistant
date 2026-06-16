@@ -105,6 +105,20 @@ fun ManualDraftScreen(
 
         // Selección de mapa: por modo (cascada) o por buscador.
         ModeMapSelector(state = state, vm = vm)
+        if (state.catalogLoading && state.catalog.isEmpty()) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                Text(
+                    "Cargando modos… (primer uso puede tardar ~30s)",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
         MapSearchField(
             query = state.mapQuery,
             suggestions = state.mapSuggestions,

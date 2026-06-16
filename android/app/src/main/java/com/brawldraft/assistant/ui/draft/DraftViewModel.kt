@@ -1,5 +1,6 @@
 package com.brawldraft.assistant.ui.draft
 
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.brawldraft.assistant.data.DraftRepository
@@ -77,6 +78,7 @@ data class DraftUiState(
     val mapDropdownExpanded: Boolean = false,
     // Catálogo por modo (selección en cascada modo → mapa)
     val catalog: List<ModeMapsDto> = emptyList(),
+    val catalogLoading: Boolean = true,
     val selectedMode: String? = "Gem Grab",
     val modeMapDropdownExpanded: Boolean = false,
     // Máquina de estados del draft
@@ -126,9 +128,26 @@ class DraftViewModel(
 
     private fun loadCatalog() {
         viewModelScope.launch {
-            repo.mapsCatalog().onSuccess { cat ->
-                _state.update { it.copy(catalog = cat) }
+            // Render (free tier) puede tardar 30-50s en despertar. Reintentamos 4 veces
+            // con 10s de pausa: el primer intento despierta a Render, el segundo o tercero llega cuando ya está listo.
+            repeat(4) { attempt ->
+                if (attempt > 0) {
+                    Log.d("DraftVM", "loadCatalog: reintento $attempt en 10s…")
+                    delay(10_000L)
+                }
+                Log.d("DraftVM", "loadCatalog: intento ${attempt + 1}/4")
+                repo.mapsCatalog()
+                    .onSuccess { cat ->
+                        Log.d("DraftVM", "loadCatalog: OK — ${cat.size} modos, ${cat.sumOf { it.maps.size }} mapas")
+                        _state.update { it.copy(catalog = cat, catalogLoading = false) }
+                        return@launch
+                    }
+                    .onFailure { e ->
+                        Log.e("DraftVM", "loadCatalog: intento ${attempt + 1} falló — ${e.message}")
+                    }
             }
+            Log.e("DraftVM", "loadCatalog: todos los intentos fallaron")
+            _state.update { it.copy(catalogLoading = false) }
         }
     }
 
@@ -168,9 +187,15 @@ class DraftViewModel(
         }
         mapSearchJob = viewModelScope.launch {
             delay(300)
-            repo.searchMap(text).onSuccess { results ->
-                _state.update { it.copy(mapSuggestions = results, mapDropdownExpanded = results.isNotEmpty()) }
-            }
+            Log.d("DraftVM", "searchMap: buscando \"$text\"")
+            repo.searchMap(text)
+                .onSuccess { results ->
+                    Log.d("DraftVM", "searchMap: OK — ${results.size} resultados para \"$text\"")
+                    _state.update { it.copy(mapSuggestions = results, mapDropdownExpanded = results.isNotEmpty()) }
+                }
+                .onFailure { e ->
+                    Log.e("DraftVM", "searchMap: ERROR — ${e.message}", e)
+                }
         }
     }
 
@@ -200,11 +225,17 @@ class DraftViewModel(
         }
         brawlerSearchJob = viewModelScope.launch {
             delay(120)
-            repo.searchBrawler(query).onSuccess { results ->
-                val taken = takenBrawlerIds()
-                val filtered = results.filter { it.id !in taken }
-                _state.update { it.copy(search = it.search.copy(suggestions = filtered, expanded = filtered.isNotEmpty())) }
-            }
+            Log.d("DraftVM", "searchBrawler: buscando \"$query\"")
+            repo.searchBrawler(query)
+                .onSuccess { results ->
+                    Log.d("DraftVM", "searchBrawler: OK — ${results.size} resultados para \"$query\"")
+                    val taken = takenBrawlerIds()
+                    val filtered = results.filter { it.id !in taken }
+                    _state.update { it.copy(search = it.search.copy(suggestions = filtered, expanded = filtered.isNotEmpty())) }
+                }
+                .onFailure { e ->
+                    Log.e("DraftVM", "searchBrawler: ERROR — ${e.message}", e)
+                }
         }
     }
 

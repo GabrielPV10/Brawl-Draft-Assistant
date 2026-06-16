@@ -9,3 +9,9 @@ data class MapDto(
     val slug: String,
     val game_mode: String,
 )
+
+@Serializable
+data class ModeMapsDto(
+    val mode: String,
+    val maps: List<MapDto>,
+)

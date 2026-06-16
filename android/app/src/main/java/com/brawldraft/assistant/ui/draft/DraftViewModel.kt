@@ -8,6 +8,7 @@ import com.brawldraft.assistant.data.api.dto.DraftPhase
 import com.brawldraft.assistant.data.api.dto.DraftRecommendationDto
 import com.brawldraft.assistant.data.api.dto.DraftRequestDto
 import com.brawldraft.assistant.data.api.dto.MapDto
+import com.brawldraft.assistant.data.api.dto.ModeMapsDto
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -74,6 +75,10 @@ data class DraftUiState(
     val mapSuggestions: List<MapDto> = emptyList(),
     val selectedMap: MapDto? = MapDto(id = 15000007, name = "Hard Rock Mine", slug = "hard-rock-mine", game_mode = "Gem Grab"),
     val mapDropdownExpanded: Boolean = false,
+    // Catálogo por modo (selección en cascada modo → mapa)
+    val catalog: List<ModeMapsDto> = emptyList(),
+    val selectedMode: String? = "Gem Grab",
+    val modeMapDropdownExpanded: Boolean = false,
     // Máquina de estados del draft
     val weAreFirstPick: Boolean = true,   // moneda azul = true, roja = false
     val strategy: Strategy = Strategy.BALANCED,
@@ -94,6 +99,10 @@ data class DraftUiState(
     val currentTurn: PickTurn? get() = pickOrder.getOrNull(turnIndex)
     val isOurTurn: Boolean get() = currentTurn?.team == Team.OURS
 
+    /** Mapas del modo seleccionado (para el dropdown en cascada). */
+    val mapsForSelectedMode: List<MapDto>
+        get() = catalog.firstOrNull { it.mode == selectedMode }?.maps ?: emptyList()
+
     /** ¿Hay algo que deshacer? (un ban, un pick, o salir de la fase de picks). */
     val canUndo: Boolean get() = when (stage) {
         DraftStage.BANS    -> bans.isNotEmpty()
@@ -109,7 +118,44 @@ class DraftViewModel(
     private val _state = MutableStateFlow(DraftUiState())
     val state: StateFlow<DraftUiState> = _state.asStateFlow()
 
-    // --------------------------------------------------------- Mapa
+    init {
+        loadCatalog()
+    }
+
+    // --------------------------------------------------------- Catálogo por modo
+
+    private fun loadCatalog() {
+        viewModelScope.launch {
+            repo.mapsCatalog().onSuccess { cat ->
+                _state.update { it.copy(catalog = cat) }
+            }
+        }
+    }
+
+    /** Selecciona un modo de juego: muestra sus mapas en el dropdown. */
+    fun setMode(mode: String) {
+        _state.update { it.copy(selectedMode = mode, modeMapDropdownExpanded = true) }
+    }
+
+    fun toggleModeMapDropdown(expanded: Boolean) {
+        _state.update { it.copy(modeMapDropdownExpanded = expanded) }
+    }
+
+    /** Elige un mapa desde el catálogo (cascada modo → mapa). */
+    fun selectMapFromCatalog(map: MapDto) {
+        _state.update {
+            it.copy(
+                selectedMap = map,
+                selectedMode = map.game_mode,
+                mapQuery = "${map.name} · ${map.game_mode}",
+                modeMapDropdownExpanded = false,
+                mapSuggestions = emptyList(),
+                mapDropdownExpanded = false,
+            )
+        }
+    }
+
+    // --------------------------------------------------------- Mapa (buscador)
 
     private var mapSearchJob: Job? = null
 

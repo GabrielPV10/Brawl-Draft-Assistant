@@ -22,6 +22,38 @@ class MapDto(BaseModel):
     game_mode: str
 
 
+class ModeMaps(BaseModel):
+    mode: str
+    maps: list[MapDto]
+
+
+@router.get("/catalog", response_model=list[ModeMaps])
+def maps_catalog(db: Session = Depends(get_db)) -> list[ModeMaps]:
+    """Catálogo de mapas competitivos agrupados por modo de juego.
+
+    Sirve para el selector en cascada (modo → mapa) de la app. Deduplica por
+    nombre dentro de cada modo (las rotaciones repiten el mismo mapa con IDs
+    distintos; nos quedamos con uno).
+    """
+    rows = db.execute(
+        select(Map)
+        .where(Map.game_mode.in_(COMPETITIVE_MODES))
+        .order_by(Map.game_mode, Map.name)
+    ).scalars().all()
+
+    grouped: dict[str, list[MapDto]] = {}
+    seen: set[tuple[str, str]] = set()
+    for r in rows:
+        key = (r.game_mode, r.name)
+        if key in seen:
+            continue
+        seen.add(key)
+        grouped.setdefault(r.game_mode, []).append(
+            MapDto(id=r.id, name=r.name, slug=r.slug, game_mode=r.game_mode)
+        )
+    return [ModeMaps(mode=mode, maps=maps) for mode, maps in sorted(grouped.items())]
+
+
 @router.get("/search", response_model=list[MapDto])
 def search_maps(
     q: str = Query(..., min_length=1),

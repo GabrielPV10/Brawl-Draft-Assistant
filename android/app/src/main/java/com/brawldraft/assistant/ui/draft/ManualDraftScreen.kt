@@ -2,6 +2,7 @@ package com.brawldraft.assistant.ui.draft
 
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -13,6 +14,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -21,6 +23,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilterChip
@@ -42,6 +45,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -49,6 +53,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.brawldraft.assistant.data.api.dto.BrawlerDto
@@ -98,6 +103,8 @@ fun ManualDraftScreen(
             fontWeight = FontWeight.Black,
         )
 
+        // Selección de mapa: por modo (cascada) o por buscador.
+        ModeMapSelector(state = state, vm = vm)
         MapSearchField(
             query = state.mapQuery,
             suggestions = state.mapSuggestions,
@@ -522,6 +529,116 @@ private fun BrawlerSearchBox(
                 )
                 if (index < search.suggestions.lastIndex) HorizontalDivider()
             }
+        }
+    }
+}
+
+// ──────────────────────────────────────────────── Selector mapa por modo (cascada)
+
+@Composable
+private fun ModeMapSelector(state: DraftUiState, vm: DraftViewModel) {
+    var modeExpanded by remember { mutableStateOf(false) }
+
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text(
+            "Elige por modo de juego",
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+            // Dropdown de MODO
+            Box(modifier = Modifier.weight(1f)) {
+                DropdownAnchor(
+                    label = "Modo",
+                    value = state.selectedMode,
+                    placeholder = "Elegir…",
+                    enabled = state.catalog.isNotEmpty(),
+                    onClick = { modeExpanded = true },
+                )
+                DropdownMenu(
+                    expanded = modeExpanded,
+                    onDismissRequest = { modeExpanded = false },
+                    modifier = Modifier.heightIn(max = 360.dp),
+                ) {
+                    state.catalog.forEach { mm ->
+                        DropdownMenuItem(
+                            text = { Text("${mm.mode}  ·  ${mm.maps.size}", style = MaterialTheme.typography.bodyMedium) },
+                            onClick = {
+                                modeExpanded = false
+                                vm.setMode(mm.mode)
+                            },
+                        )
+                    }
+                }
+            }
+
+            // Dropdown de MAPA (depende del modo elegido)
+            Box(modifier = Modifier.weight(1f)) {
+                DropdownAnchor(
+                    label = "Mapa",
+                    value = state.selectedMap?.name,
+                    placeholder = "Elegir…",
+                    enabled = state.mapsForSelectedMode.isNotEmpty(),
+                    onClick = { vm.toggleModeMapDropdown(true) },
+                )
+                DropdownMenu(
+                    expanded = state.modeMapDropdownExpanded && state.mapsForSelectedMode.isNotEmpty(),
+                    onDismissRequest = { vm.toggleModeMapDropdown(false) },
+                    modifier = Modifier.heightIn(max = 360.dp),
+                ) {
+                    state.mapsForSelectedMode.forEach { map ->
+                        DropdownMenuItem(
+                            text = { Text(map.name, style = MaterialTheme.typography.bodyMedium) },
+                            onClick = { vm.selectMapFromCatalog(map) },
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** Campo con apariencia de input que abre un menú al tocarlo (etiqueta + valor + chevron). */
+@Composable
+private fun DropdownAnchor(
+    label: String,
+    value: String?,
+    placeholder: String,
+    enabled: Boolean,
+    onClick: () -> Unit,
+) {
+    Surface(
+        onClick = onClick,
+        enabled = enabled,
+        shape = MaterialTheme.shapes.small,
+        color = MaterialTheme.colorScheme.surface,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    label,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Text(
+                    value ?: placeholder,
+                    style = MaterialTheme.typography.bodyMedium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    color = if (value != null) MaterialTheme.colorScheme.onSurface
+                            else MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Icon(
+                Icons.Default.KeyboardArrowDown,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
     }
 }

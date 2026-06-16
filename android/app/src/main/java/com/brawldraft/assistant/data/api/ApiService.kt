@@ -3,6 +3,7 @@ package com.brawldraft.assistant.data.api
 import com.brawldraft.assistant.data.api.dto.BrawlerDto
 import com.brawldraft.assistant.data.api.dto.DraftRequestDto
 import com.brawldraft.assistant.data.api.dto.MapDto
+import com.brawldraft.assistant.data.api.dto.ModeMapsDto
 import com.brawldraft.assistant.data.api.dto.DraftResponseDto
 import com.brawldraft.assistant.data.api.dto.ProfileCreateRequest
 import com.brawldraft.assistant.data.api.dto.ProfileDto
@@ -27,6 +28,9 @@ interface ApiService {
 
     @GET("/maps/search")
     suspend fun searchMaps(@Query("q") query: String): List<MapDto>
+
+    @GET("/maps/catalog")
+    suspend fun mapsCatalog(): List<ModeMapsDto>
 
     @POST("/recommend")
     suspend fun recommend(@Body req: DraftRequestDto): DraftResponseDto

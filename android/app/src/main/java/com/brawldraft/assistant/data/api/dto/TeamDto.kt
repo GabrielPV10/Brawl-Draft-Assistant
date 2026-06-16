@@ -4,6 +4,20 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
 @Serializable
+data class EvaluateRequestDto(
+    @SerialName("map_id") val mapId: Int,
+    val allies: List<Int>,
+    val enemies: List<Int>,
+)
+
+@Serializable
+data class EvaluateResponseDto(
+    @SerialName("win_probability") val winProbability: Double,
+    @SerialName("our_avg_score") val ourAvgScore: Double,
+    @SerialName("enemy_avg_score") val enemyAvgScore: Double,
+)
+
+@Serializable
 data class BrawlerProficiencyDto(
     @SerialName("brawler_id") val brawlerId: Int,
     @SerialName("brawler_name") val brawlerName: String,

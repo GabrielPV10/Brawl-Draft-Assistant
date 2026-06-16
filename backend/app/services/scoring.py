@@ -16,6 +16,7 @@ Los sub-cálculos viven en métodos separados para poder testearlos aisladamente
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 
 from sqlalchemy import and_, func, select
@@ -320,6 +321,56 @@ class ScoringEngine:
             PlayerProficiency.player_tag == player_tag
         )
         return {row.brawler_id: row.proficiency / 100.0 for row in self.db.execute(stmt)}
+
+    # ------------------------------------------------- evaluación de equipos completos
+
+    def evaluate_team(
+        self,
+        map_id: int,
+        allies: list[int],
+        enemies: list[int],
+    ) -> dict:
+        """Estima la probabilidad de victoria comparando ambos equipos pick a pick.
+
+        Para cada brawler calcula su valor con pesos balanced (sin fase), usando
+        al otro equipo como enemigos y a sus compañeros como aliados.
+        La probabilidad usa una función sigmoide: 50% base, ±50% por diferencia.
+        """
+        w = self.weights
+
+        def _score_brawler(brawler_id: int, allies_ctx: list[int], enemies_ctx: list[int]) -> float:
+            factors = FactorBreakdown(
+                winrate_mapa=self._winrate_mapa(brawler_id, map_id),
+                counter_score=self._counter_score(brawler_id, enemies_ctx),
+                sinergia=self._sinergia(brawler_id, allies_ctx, map_id),
+                pickrate_relativo=self._pickrate_relativo(brawler_id, map_id),
+                ban_risk=0.0,
+                counterable=self._counterable(brawler_id),
+                personal_proficiency=0.0,
+            )
+            return self._apply_weights(factors, w)
+
+        our_scores = [
+            _score_brawler(a, [x for x in allies if x != a], enemies)
+            for a in allies
+        ]
+        enemy_scores = [
+            _score_brawler(e, [x for x in enemies if x != e], allies)
+            for e in enemies
+        ]
+
+        our_avg = sum(our_scores) / max(len(our_scores), 1)
+        enemy_avg = sum(enemy_scores) / max(len(enemy_scores), 1)
+
+        # sigmoid: diff=0 → 50%, diff=+0.5 → ~73%, diff=+1.0 → ~88%
+        diff = our_avg - enemy_avg
+        win_prob = 50.0 + 50.0 * math.tanh(diff * 2.5)
+
+        return {
+            "win_probability": round(win_prob, 1),
+            "our_avg_score": round(our_avg, 4),
+            "enemy_avg_score": round(enemy_avg, 4),
+        }
 
     # ------------------------------------------------- helper público de test
 

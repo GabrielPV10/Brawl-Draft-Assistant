@@ -5,6 +5,8 @@ import com.brawldraft.assistant.data.api.ApiService
 import com.brawldraft.assistant.data.api.dto.BrawlerDto
 import com.brawldraft.assistant.data.api.dto.DraftRequestDto
 import com.brawldraft.assistant.data.api.dto.DraftResponseDto
+import com.brawldraft.assistant.data.api.dto.EvaluateRequestDto
+import com.brawldraft.assistant.data.api.dto.EvaluateResponseDto
 import com.brawldraft.assistant.data.api.dto.MapDto
 import com.brawldraft.assistant.data.api.dto.ModeMapsDto
 
@@ -34,6 +36,10 @@ class DraftRepository(
 
     suspend fun mapsCatalog(): Result<List<ModeMapsDto>> = runCatching {
         api.mapsCatalog()
+    }
+
+    suspend fun evaluateTeam(req: EvaluateRequestDto): Result<EvaluateResponseDto> = runCatching {
+        api.evaluateTeam(req)
     }
 
     suspend fun health(): Result<Boolean> = runCatching {

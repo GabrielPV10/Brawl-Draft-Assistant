@@ -8,6 +8,7 @@ import com.brawldraft.assistant.data.api.dto.BrawlerDto
 import com.brawldraft.assistant.data.api.dto.DraftPhase
 import com.brawldraft.assistant.data.api.dto.DraftRecommendationDto
 import com.brawldraft.assistant.data.api.dto.DraftRequestDto
+import com.brawldraft.assistant.data.api.dto.EvaluateRequestDto
 import com.brawldraft.assistant.data.api.dto.MapDto
 import com.brawldraft.assistant.data.api.dto.ModeMapsDto
 import kotlinx.coroutines.Job
@@ -95,6 +96,10 @@ data class DraftUiState(
     val loading: Boolean = false,
     val recommendations: List<DraftRecommendationDto> = emptyList(),
     val computedInMs: Int = 0,
+    // Probabilidad de victoria (disponible al final del draft)
+    val winProbability: Double? = null,
+    val ourAvgScore: Double? = null,
+    val enemyAvgScore: Double? = null,
     val error: String? = null,
 ) {
     val pickOrder: List<PickTurn> get() = buildPickOrder(weAreFirstPick)
@@ -310,10 +315,38 @@ class DraftViewModel(
         clearSearch()
         if (next >= _state.value.pickOrder.size) {
             _state.update { it.copy(turnIndex = next, stage = DraftStage.DONE, recommendations = emptyList()) }
+            evaluateTeam()
             return
         }
         _state.update { it.copy(turnIndex = next, recommendations = emptyList()) }
         fetchRecommendationsIfOurTurn()
+    }
+
+    private fun evaluateTeam() {
+        val s = _state.value
+        val mapId = s.selectedMap?.id ?: return
+        if (s.allies.isEmpty() || s.enemies.isEmpty()) return
+        viewModelScope.launch {
+            Log.d("DraftVM", "evaluateTeam: calculando probabilidad de victoria")
+            repo.evaluateTeam(
+                EvaluateRequestDto(
+                    mapId = mapId,
+                    allies = s.allies.map { it.id },
+                    enemies = s.enemies.map { it.id },
+                )
+            ).onSuccess { resp ->
+                Log.d("DraftVM", "evaluateTeam: ${resp.winProbability}%")
+                _state.update {
+                    it.copy(
+                        winProbability = resp.winProbability,
+                        ourAvgScore = resp.ourAvgScore,
+                        enemyAvgScore = resp.enemyAvgScore,
+                    )
+                }
+            }.onFailure { e ->
+                Log.e("DraftVM", "evaluateTeam: ERROR — ${e.message}")
+            }
+        }
     }
 
     private fun fetchRecommendationsIfOurTurn() {
@@ -398,6 +431,9 @@ class DraftViewModel(
             DraftUiState(
                 mapQuery = it.mapQuery,
                 selectedMap = it.selectedMap,
+                catalog = it.catalog,
+                selectedMode = it.selectedMode,
+                catalogLoading = it.catalogLoading,
                 weAreFirstPick = it.weAreFirstPick,
                 strategy = it.strategy,
             )

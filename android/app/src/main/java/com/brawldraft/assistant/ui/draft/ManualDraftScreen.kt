@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -496,6 +497,13 @@ private fun DonePhase(state: DraftUiState, vm: DraftViewModel) {
                 color = ALLY_COLOR,
             )
         }
+
+        WinProbabilityCard(
+            probability = state.winProbability,
+            ourScore = state.ourAvgScore,
+            enemyScore = state.enemyAvgScore,
+        )
+
         Row(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             modifier = Modifier.fillMaxWidth(),
@@ -508,6 +516,121 @@ private fun DonePhase(state: DraftUiState, vm: DraftViewModel) {
                 onClick = vm::resetDraft,
                 modifier = Modifier.weight(1f),
             )
+        }
+    }
+}
+
+@Composable
+private fun WinProbabilityCard(
+    probability: Double?,
+    ourScore: Double?,
+    enemyScore: Double?,
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        elevation = CardDefaults.cardElevation(defaultElevation = 3.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Text(
+                "Probabilidad estimada de victoria",
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+
+            if (probability == null) {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                    Text(
+                        "Calculando…",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            } else {
+                val prob = probability.toFloat()
+                val barColor = when {
+                    prob >= 60f -> ALLY_COLOR
+                    prob >= 45f -> Color(0xFFFFC107)
+                    else        -> ENEMY_COLOR
+                }
+                val label = when {
+                    prob >= 70f -> "Ventaja clara"
+                    prob >= 55f -> "Ligera ventaja"
+                    prob >= 45f -> "Equilibrado"
+                    prob >= 30f -> "Ligera desventaja"
+                    else        -> "En desventaja"
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.Bottom,
+                ) {
+                    Text(
+                        "%.1f%%".format(prob),
+                        style = MaterialTheme.typography.displaySmall,
+                        fontWeight = FontWeight.Black,
+                        color = barColor,
+                    )
+                    Text(
+                        label,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = barColor,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                }
+
+                // Barra de probabilidad: azul = tu equipo, rojo = rival
+                var target by remember { mutableFloatStateOf(0f) }
+                val animProb by animateFloatAsState(targetValue = target, animationSpec = tween(800), label = "win_bar")
+                LaunchedEffect(prob) { target = prob / 100f }
+
+                Box(modifier = Modifier.fillMaxWidth().height(14.dp)) {
+                    // Fondo (rival)
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(ENEMY_COLOR.copy(alpha = 0.25f), MaterialTheme.shapes.small)
+                    )
+                    // Barra (tu equipo)
+                    Box(
+                        modifier = Modifier
+                            .fillMaxHeight()
+                            .fillMaxWidth(animProb)
+                            .background(barColor, MaterialTheme.shapes.small)
+                    )
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Text("Tu equipo", style = MaterialTheme.typography.labelSmall, color = ALLY_COLOR)
+                    Text("Rival", style = MaterialTheme.typography.labelSmall, color = ENEMY_COLOR)
+                }
+
+                if (ourScore != null && enemyScore != null) {
+                    Text(
+                        "Score tu equipo %.3f · Rival %.3f".format(ourScore, enemyScore),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+
+                Text(
+                    "Basado en datos sintéticos (no reflejan estadísticas reales del juego)",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                )
+            }
         }
     }
 }

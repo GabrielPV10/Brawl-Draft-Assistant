@@ -6,6 +6,7 @@ import com.brawldraft.assistant.data.api.dto.BrawlerDto
 import com.brawldraft.assistant.data.api.dto.DraftRequestDto
 import com.brawldraft.assistant.data.api.dto.DraftResponseDto
 import com.brawldraft.assistant.data.api.dto.MapDto
+import com.brawldraft.assistant.data.api.dto.ModeMapsDto
 
 /**
  * Repositorio único para draft. Por ahora sólo proxy al backend; en Fase 2/3
@@ -29,6 +30,10 @@ class DraftRepository(
 
     suspend fun searchMap(query: String): Result<List<MapDto>> = runCatching {
         api.searchMaps(query)
+    }
+
+    suspend fun mapsCatalog(): Result<List<ModeMapsDto>> = runCatching {
+        api.mapsCatalog()
     }
 
     suspend fun health(): Result<Boolean> = runCatching {
